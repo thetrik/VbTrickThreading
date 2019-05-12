@@ -1,0 +1,126 @@
+[
+  uuid(3acd5949-ef9c-4c24-b5c9-66eecd74f05f)
+]
+library Import {
+
+    typedef struct 
+    {
+        long pDebugInfo;
+        long LockCount;
+        long RecursionCount;
+        long OwningThread;
+        long LockSemaphore;
+        long SpinCount;
+    } CRITICAL_SECTION;
+
+	typedef struct {
+		long x;
+		long y;
+	} POINTAPI;
+
+	typedef struct {
+		long hwnd;
+		long message;
+		long wParam;
+		long lParam;
+		long time;
+		POINTAPI pt;
+	} MSG;
+
+	[dllname("OLEAUT32.DLL")]
+    module oleaut32 {
+
+		[entry("DispCallFunc")]
+		long _stdcall DispCallFunc(
+					  void* pvInstance,
+					  long oVft,
+					  long cc,
+					  long vtReturn, 
+					  long cActuals,
+					  void* prgvt,
+					  void* prgpvarg, 
+					  VARIANT* pvargResult);
+
+	}
+
+	[dllname("USER32.DLL")]
+    module user32 {
+
+		[entry("PeekMessageW")]
+		long _stdcall PeekMessage(
+					  MSG* lpMsg,
+					  long hWnd,
+					  long wMsgFilterMin,
+					  long wMsgFilterMax, 
+					  long wRemoveMsg);
+
+		[entry("TranslateMessage")]
+		long _stdcall TranslateMessage(
+					  MSG* lpMsg);
+
+		[entry("DispatchMessageW")]
+		long _stdcall DispatchMessage(
+					  MSG* lpMsg);
+
+		[entry("MsgWaitForMultipleObjects")]
+		int MsgWaitForMultipleObjects(
+			          int nCount,
+					  int *pHandles, 
+					  int bWaitAll,
+					  int dwMilliseconds,
+					  int dwWakeMask);
+	}
+
+	[dllname("KERNEL32.DLL")]
+    module kernel32 {
+
+		[entry("CreateThread")]
+		long _stdcall CreateThread(
+					  void* lpThreadAttributes,
+					  long dwStackSize,
+					  long lpStartAddress,
+					  void* lpParameter,
+					  long dwCreationFlags,
+					  long* lpThreadId);
+
+		[entry("EnterCriticalSection")]
+		void _stdcall EnterCriticalSection(
+					  CRITICAL_SECTION *lpCriticalSection);
+
+		[entry("LeaveCriticalSection")]
+		void _stdcall LeaveCriticalSection(
+					  CRITICAL_SECTION *lpCriticalSection);
+
+		[entry("InitializeCriticalSection")]
+		void _stdcall InitializeCriticalSection(
+					  CRITICAL_SECTION *lpCriticalSection);
+
+		[entry("DeleteCriticalSection")]
+		void _stdcall DeleteCriticalSection(
+					  CRITICAL_SECTION *lpCriticalSection);
+
+		[entry("CloseHandle")]
+		int CloseHandle(
+					  int hObject);
+
+		[entry("GetCurrentThreadId")]
+		int GetCurrentThreadId();
+
+		[entry("Sleep")]
+		int Sleep(
+					  int lMilliseconds);
+
+		[entry("WaitForSingleObject")]
+		int WaitForSingleObject(
+			          int hObject,
+					  int dwMilliseconds);
+
+		const int DLL_PROCESS_DETACH		= 0x0;
+		const int DLL_PROCESS_ATTACH		= 0x1;
+		const int DLL_THREAD_ATTACH 		= 0x2;
+		const int DLL_THREAD_DETACH			= 0x3;
+
+	}
+
+
+}

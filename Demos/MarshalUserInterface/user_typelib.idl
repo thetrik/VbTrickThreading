@@ -1,0 +1,30 @@
+[uuid(2E8B35BD-EE5B-4CB8-9EBB-132017779212)]
+library user_typlib {
+	importlib("stdole2.tlb");
+
+	[uuid(02FAF1A8-5F2E-4849-A8E3-E6B92BC7AE04), oleautomation]
+	interface ILogObject : IUnknown {
+		
+		HRESULT Log(BSTR sMsg);
+
+	}
+
+	[uuid(02FAF1A8-5F2E-4849-A8E3-E6B92BC7AE05), oleautomation]
+	interface IUserInterface : IUnknown {
+		
+		HRESULT SetLogObject(ILogObject *pObj);
+
+		[propput]
+		HRESULT Value(VARIANT vVal);
+
+		[propget]
+		HRESULT Value([out, retval] VARIANT* vRet);
+
+		[propget]
+		HRESULT ThreadID([out, retval] long* lRet);
+
+		HRESULT ShowMessage(BSTR sMsg);
+
+	}
+
+}
