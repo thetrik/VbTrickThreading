@@ -1,15 +1,14 @@
 Attribute VB_Name = "modMultiThreading"
 ' //
 ' // modMultiThreading2.bas - The module provides support for multi-threading.
-' // Version 2
-' // © Krivous Anatoly Anatolevich (The trick), 2015-2018
+' // Version 2.1
+' // © Krivous Anatoly Anatolevich (The trick), 2015-2019
 ' // No TLB, No additional DLLs, No Asm-thunks (in compiled form)
 ' // Private object creation based on NameBasedObjectFactory by firehacker
 ' //
 
 Option Explicit
 
-Private Const HEAP_NO_SERIALIZE           As Long = &H1
 Private Const HEAP_CREATE_ENABLE_EXECUTE  As Long = &H40000
 Private Const PAGE_READWRITE              As Long = 4&
 Private Const CC_STDCALL                  As Long = 4
@@ -25,7 +24,6 @@ Private Const MSHLFLAGS_TABLESTRONG       As Long = 1
 Private Const MSHCTX_INPROC               As Long = 3
 Private Const WM_ASYNCH_CALL              As Long = &H8001&
 Private Const TLS_OUT_OF_INDEXES          As Long = &HFFFF&
-Private Const ERROR_NO_MORE_ITEMS         As Long = 259&
 Private Const PROCESS_HEAP_ENTRY_BUSY     As Long = &H4
 Private Const TH32CS_SNAPTHREAD           As Long = 4
 Private Const MESSAGE_WINDOW_CLASS        As String = "MT2_VB6"
@@ -167,8 +165,8 @@ Private Declare Sub DeleteCriticalSection Lib "kernel32" ( _
                     ByRef lpCriticalSection As CRITICAL_SECTION)
 Private Declare Function TryEnterCriticalSection Lib "kernel32" ( _
                          ByRef lpCriticalSection As CRITICAL_SECTION) As Long
-Private Declare Function IStream_Reset Lib "Shlwapi" ( _
-                         ByVal pstm As Any) As Long
+Private Declare Function IStream_Reset Lib "Shlwapi" Alias "#213" ( _
+                         ByVal pStm As Any) As Long
 Private Declare Function rtcCallByName Lib "msvbvm60" ( _
                          ByRef vRet As Variant, _
                          ByVal cObj As Object, _
@@ -207,11 +205,6 @@ Private Declare Function RegSetValueEx Lib "advapi32.dll" _
                          ByRef lpData As Any, _
                          ByVal cbData As Long) As Long
 Private Declare Function CreateIExprSrvObj Lib "MSVBVM60.DLL" ( _
-                         ByVal pUnk1 As Long, _
-                         ByVal lUnk2 As Long, _
-                         ByVal pUnk3 As Long) As IUnknown
-Private Declare Function CreateIExprSrvObj2 Lib "vba6" _
-                         Alias "CreateIExprSrvObj" ( _
                          ByVal pUnk1 As Long, _
                          ByVal lUnk2 As Long, _
                          ByVal pUnk3 As Long) As IUnknown
@@ -294,22 +287,22 @@ Private Declare Function CoMarshalInterThreadInterfaceInStream Lib "ole32.dll" (
                          ByVal pUnk As Any, _
                          ByRef ppstm As Any) As Long
 Private Declare Function CoMarshalInterface Lib "ole32.dll" ( _
-                         ByVal pstm As Long, _
+                         ByVal pStm As Long, _
                          ByRef riid As Any, _
                          ByVal pUnk As Any, _
                          ByVal dwDestContext As Long, _
                          ByRef pvDestContext As Any, _
                          ByVal mshlflags As Long) As Long
 Private Declare Function CoGetInterfaceAndReleaseStream Lib "ole32.dll" ( _
-                         ByVal pstm As Long, _
+                         ByVal pStm As Long, _
                          ByRef riid As Any, _
                          ByRef pUnk As Any) As Long
 Private Declare Function CoUnmarshalInterface Lib "ole32.dll" ( _
-                         ByVal pstm As Long, _
+                         ByVal pStm As Long, _
                          ByRef riid As Any, _
                          ByRef pUnk As Any) As Long
 Private Declare Function CoReleaseMarshalData Lib "ole32" ( _
-                         ByVal pstm As Long) As Long
+                         ByVal pStm As Long) As Long
 Private Declare Function GetMessage Lib "user32" _
                          Alias "GetMessageW" ( _
                          ByRef lpMsg As Any, _
@@ -345,14 +338,6 @@ Private Declare Function CreateStreamOnHGlobal Lib "ole32" ( _
                          ByVal hGlobal As Long, _
                          ByVal fDeleteOnRelease As Long, _
                          ByRef ppstm As Any) As Long
-Private Declare Function VariantCopy Lib "oleaut32" ( _
-                         ByRef pvargDest As Any, _
-                         ByRef pvargSrc As Any) As Long
-Private Declare Function VariantClear Lib "oleaut32" ( _
-                         ByRef pvarg As Any) As Long
-Private Declare Function VariantCopyInd Lib "oleaut32" ( _
-                         ByRef pvarDest As Any, _
-                         ByRef pvargSrc As Any) As Long
 Private Declare Function PostThreadMessage Lib "user32" _
                          Alias "PostThreadMessageW" ( _
                          ByVal idThread As Long, _
@@ -365,7 +350,6 @@ Private Declare Function lstrlen Lib "kernel32" _
 Private Declare Function SysAllocStringByteLen Lib "oleaut32" ( _
                          ByRef m_pBase As Any, _
                          ByVal sz As Long) As String
-Private Declare Function GetCurrentThreadId Lib "kernel32" () As Long
 Private Declare Function CreateToolhelp32Snapshot Lib "kernel32" ( _
                          ByVal dwFlags As Long, _
                          ByVal th32ProcessID As Long) As Long
@@ -460,11 +444,11 @@ Private hMsgWindow      As Long     ' // Handle of message window
 
 ' // Initialize
 Public Function Initialize() As Boolean
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
-    If Not bIsinIDE Then
+    If Not bIsInIDE Then
         
         InitializeCriticalSection tLockMarshal.tWinApiSection
         tLockMarshal.bIsInitialized = True
@@ -487,6 +471,9 @@ Public Function Initialize() As Boolean
     lTlsSlot = TlsAlloc()
     If lTlsSlot = TLS_OUT_OF_INDEXES Then GoTo CleanUp
     
+    ' // Main thread already initialized
+    TlsSetValue lTlsSlot, ByVal 1&
+    
     Initialize = True
     
 CleanUp:
@@ -500,19 +487,20 @@ End Function
 ' // Uninitialize resources
 ' // WARNING! Don't call it if a thread uses resources
 Public Sub Uninitialize()
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
-    If bIsinIDE Then
+    If bIsInIDE Then
     
-        If hCodeHeap Then HeapDestroy hCodeHeap
         If hMsgWindow Then
         
             DestroyWindow hMsgWindow
             UnregisterClass StrPtr(MESSAGE_WINDOW_CLASS), App.hInstance
             
         End If
+        
+        If hCodeHeap Then HeapDestroy hCodeHeap
         
         hMsgWindow = 0
         hCodeHeap = 0
@@ -541,13 +529,13 @@ Public Function vbCreateThread(ByVal lpThreadAttributes As Long, _
                                ByVal dwCreationFlags As Long, _
                                ByRef lpThreadId As Long, _
                                Optional ByVal bIDEInSameThread As Boolean = True) As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     Dim hr          As Long
     Dim pThreadData As Long
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
-    If bIsinIDE Then
+    If bIsInIDE Then
 
         If bIDEInSameThread Then
         
@@ -583,10 +571,6 @@ End Function
 Public Function EnablePrivateMarshaling( _
                 ByVal bEnable As Boolean) As Boolean
     Dim hKey        As Long
-    Dim lType       As Long
-    Dim bData(255)  As Byte
-    Dim lSize       As Long
-    Dim lRet        As Long
     Dim sValue      As String
     
     If bEnable Then
@@ -791,7 +775,6 @@ End Sub
 Private Function FindThunk( _
                  ByVal pfn As Long) As Long
     Dim tEntry  As PROCESS_HEAP_ENTRY
-    Dim lIndex  As Long
     Dim pfnCur  As Long
     
     If HeapLock(hCodeHeap) = 0 Then Exit Function
@@ -856,11 +839,11 @@ Public Function InitCurrentThreadAndCallFunction( _
     Dim pThreadData As Long
     Dim hr          As Long
     Dim vRet        As Variant
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
-    If bIsinIDE Then
+    If bIsInIDE Then
         ' // Error
         Exit Function
     End If
@@ -909,9 +892,9 @@ Public Function CreatePrivateObjectByNameInNewThread( _
     Dim hThread         As Long
     Dim tIID_IDispatch  As tCurGUID
     Dim sAnsiName       As String
-    Dim bIsinIDE        As Boolean
+    Dim bIsInIDE        As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
     sAnsiName = StrConv(sClassName, vbFromUnicode)
     
@@ -929,7 +912,7 @@ Public Function CreatePrivateObjectByNameInNewThread( _
     Else:   tThreadData.pIID = pIID
     End If
         
-    If bIsinIDE Then
+    If bIsInIDE Then
     
         ActiveXThreadProc tThreadData
         vbaObjSet CreatePrivateObjectByNameInNewThread, ByVal tThreadData.pStream
@@ -982,9 +965,9 @@ Public Function CreateActiveXObjectInNewThread( _
     Dim tThreadData     As tNewObjectThreadData
     Dim hThread         As Long
     Dim tIID_IDispatch  As tCurGUID
-    Dim bIsinIDE        As Boolean
+    Dim bIsInIDE        As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
     tThreadData.eFlags = OTDF_ACTIVEX
     tThreadData.pClsid = pClsid
@@ -999,7 +982,7 @@ Public Function CreateActiveXObjectInNewThread( _
     Else:   tThreadData.pIID = pIID
     End If
         
-    If bIsinIDE Then
+    If bIsInIDE Then
         
         ActiveXThreadProc tThreadData
         vbaObjSet CreateActiveXObjectInNewThread, ByVal tThreadData.pStream
@@ -1032,13 +1015,13 @@ End Function
 Public Sub WaitForObjectThreadCompletion( _
            ByVal lAsynchId As Long)
     Dim hThread     As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     Dim tMSG        As msg
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
     ' // Unsupported in IDE
-    If bIsinIDE Then Exit Sub
+    If bIsInIDE Then Exit Sub
     
     hThread = OpenThread(SYNCHRONIZE, 0, lAsynchId)
     If hThread = 0 Then Exit Sub
@@ -1069,12 +1052,12 @@ Public Sub SuspendResume( _
            ByVal lAsynchId As Long, _
            ByVal bSuspend As Boolean)
     Dim hThread     As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
     ' // Unsupported in IDE
-    If bIsinIDE Then Exit Sub
+    If bIsInIDE Then Exit Sub
     
     hThread = OpenThread(THREAD_SUSPEND_RESUME, 0, lAsynchId)
     If hThread = 0 Then Exit Sub
@@ -1109,17 +1092,17 @@ Public Sub AsynchDispMethodCall( _
     Dim tAsynchData As tAsynchCallData
     Dim pData       As Long
     Dim pStruct     As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     Dim cObj        As IUnknown
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
     tAsynchData.sMethodName = sMethodName
     tAsynchData.sCallBackName = sCallBackMethod
     tAsynchData.eCallType = eCallType
     tAsynchData.vArgs = vArgs
         
-    If bIsinIDE Then
+    If bIsInIDE Then
         
         tAsynchData.pStream = ObjPtr(cCallbackObject)
         vbaObjSetAddref cObj, ByVal lAsynchId
@@ -1195,7 +1178,7 @@ Public Function Marshal2( _
                 Optional ByVal pInterface As Long) As Long
     Dim tIID_IDispatch  As tCurGUID
     Dim hr              As Long
-    Dim pstm            As Long
+    Dim pStm            As Long
     
     ' // If interface is not specified use IDispatch one
     If pInterface = 0 Then
@@ -1207,22 +1190,22 @@ Public Function Marshal2( _
         
     End If
     
-    hr = CreateStreamOnHGlobal(0, 1, pstm)
+    hr = CreateStreamOnHGlobal(0, 1, pStm)
     
     If hr Then
         Err.Raise hr
     End If
     
-    hr = CoMarshalInterface(pstm, ByVal pInterface, cObject, MSHCTX_INPROC, ByVal 0&, MSHLFLAGS_TABLESTRONG)
+    hr = CoMarshalInterface(pStm, ByVal pInterface, cObject, MSHCTX_INPROC, ByVal 0&, MSHLFLAGS_TABLESTRONG)
      
     If hr Then
     
-        vbaObjSet pstm, ByVal 0&
+        vbaObjSet pStm, ByVal 0&
         Err.Raise hr
         
     End If
     
-    Marshal2 = pstm
+    Marshal2 = pStm
     
 End Function
        
@@ -1256,8 +1239,6 @@ Public Function UnMarshal( _
                 Optional ByVal bReleaseStream As Boolean = True) As IUnknown
     Dim tIID_IDispatch  As tCurGUID
     Dim hr              As Long
-    Dim lStmSize        As Long
-    Dim cSize           As Currency
     
     If pInterface = 0 Then
     
@@ -1308,9 +1289,9 @@ Private Function ActiveXThreadProc( _
     Dim vRet        As Variant
     Dim lRet        As Long
     Dim hr          As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
     If tThreadData.eFlags = OTDF_ACTIVEX Then
         tThreadData.hr = CoCreateInstance(tThreadData.pClsid, 0, CLSCTX_INPROC_SERVER Or CLSCTX_LOCAL_SERVER, _
@@ -1319,7 +1300,7 @@ Private Function ActiveXThreadProc( _
         tThreadData.hr = CreatePrivateClass(tThreadData.pClsid, tThreadData.pIID, cObj)
     End If
     
-    If bIsinIDE Then
+    If bIsInIDE Then
         vbaObjSetAddref tThreadData.pStream, ByVal ObjPtr(cObj)
     Else
     
@@ -1387,7 +1368,7 @@ Private Function CreatePrivateClass( _
                  ByVal pClassName As Long, _
                  ByVal pIID As Long, _
                  ByRef cObj As IUnknown) As Long
-    Dim bIsinIDE        As Boolean
+    Dim bIsInIDE        As Boolean
     Dim pProjInfo       As Long
     Dim pObjTable       As Long
     Dim pObjDesc        As Long
@@ -1403,9 +1384,9 @@ Private Function CreatePrivateClass( _
     Dim vArgs(1)        As Variant
     Dim vResult         As Variant
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
 
-    If bIsinIDE Then
+    If bIsInIDE Then
         
         sClassName = SysAllocStringByteLen(ByVal pClassName, lstrlen(pClassName))
         EbExecuteLine StrPtr("modMultithreading.QueueObject new " & sClassName), 0, 0, 0
@@ -1477,19 +1458,18 @@ Private Function MakeAsynchCall( _
     Dim cCallBack   As Object
     Dim vRet        As Variant
     Dim pStruct     As Long
-    Dim pvArgs      As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
     On Error GoTo error_handler
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
     ' // Copy Structure
     pStruct = VarPtr(tData)
     
     CopyMemory ByVal pStruct, ByVal pData, Len(tData)
     
-    If bIsinIDE Then
+    If bIsInIDE Then
          
         vbaObjSetAddref cCallBack, ByVal tData.pStream
         
@@ -1530,9 +1510,9 @@ End Function
 Private Function PrepareData( _
                  ByVal lpStartAddress As Long, _
                  ByVal lpParameter As Long) As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
 
     Dim pThreadData As Long
     Dim tThreadData As tThreadData
@@ -1557,20 +1537,16 @@ End Function
 Private Function ThreadProc( _
                  ByVal pParameter As Long) As Long
     Dim cExpSrv     As IUnknown
-    Dim hr          As Long
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     Dim tClsId      As tCurGUID
     Dim tIID        As tCurGUID
     Dim tThreadData As tThreadData
     Dim hHeap       As Long
-    Dim pContext    As Long
-    Dim pProjInfo   As Long
-    Dim lIsNative   As Long
     Dim pNewHeader  As Long
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
     
-    If Not bIsinIDE Then
+    If Not bIsInIDE Then
         Set cExpSrv = CreateIExprSrvObj(0, 4, 0)
     End If
     
@@ -1582,7 +1558,7 @@ Private Function ThreadProc( _
     
     GetMem8 ByVal pParameter, tThreadData
 
-    If bIsinIDE Then
+    If bIsInIDE Then
         FakeMain
     Else
         
@@ -1606,19 +1582,10 @@ Private Function ThreadProc( _
     ThreadProc = tThreadData.lpParameter
     
     HeapFree hHeap, 0, pParameter
-    
-    ' // Set state
-    TlsSetValue lTlsSlot, ByVal 0&
-    
+
     CoUninitialize
     
 End Function
-
-' // Free copy of header
-Private Sub FreeHeaderCopy( _
-            ByVal pHeader As Long)
-    HeapFree GetProcessHeap(), 0, pHeader - 4
-End Sub
 
 ' // Free unused headers
 ' // If other thread already is being cleaning return true
@@ -1856,9 +1823,9 @@ Private Sub FakeMain()
     Dim pData       As Long
     Dim tThreadData As tThreadData
     Dim vRet        As Variant
-    Dim bIsinIDE    As Boolean
+    Dim bIsInIDE    As Boolean
     
-    Debug.Assert MakeTrue(bIsinIDE)
+    Debug.Assert MakeTrue(bIsInIDE)
 
     pData = TlsGetValue(lTlsSlot)
     
@@ -1894,7 +1861,6 @@ Private Sub ModifyVBHeader( _
     Dim lOldProtect     As Long
     Dim lFlags          As Long
     Dim lFormsCount     As Long
-    Dim lModulesCount   As Long
     Dim lStructSize     As Long
     
     ptr = pVBHeader + &H2C
@@ -1918,7 +1884,8 @@ Private Sub ModifyVBHeader( _
         ' // Get flag (unknown5) from current form
         GetMem4 ByVal ptr + &H28, lFlags
         
-        ' // When set, bit 5,
+        ' // When set, bit 5
+        ' // Bit 5 is the startup form
         If lFlags And &H10 Then
         
             ' // Unset bit 5

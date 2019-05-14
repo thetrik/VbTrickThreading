@@ -1,11 +1,11 @@
 Type=Exe
-Reference=*\G{00020430-0000-0000-C000-000000000046}#2.0#0#..\..\..\..\..\..\..\..\Windows\SysWOW64\stdole2.tlb#OLE Automation
-Reference=*\G{2E8B35BD-EE5B-4CB8-9EBB-132017779212}#0.0#0#user_typelib.tlb#user_typlib
+Reference=*\G{00020430-0000-0000-C000-000000000046}#2.0#0#..\..\..\..\..\..\..\..\..\Windows\SysWOW64\stdole2.tlb#OLE Automation
+Reference=*\G{2E8B35BD-EE5B-4CB8-9EBB-132017779212}#0.0#0#..\..\..\..\v2\Demos\MarshalUserInterface\user_typelib.tlb#user_typlib
 Form=frmMain.frm
 Module=modMain; modMain.bas
 Class=CUserClass; CUserClass.cls
-ResFile32="MarshalUserInterface.RES"
 Module=modMultiThreading; ..\..\modMultiThreading2.bas
+ResFile32="MarshalUserInterface.RES"
 Startup="frmMain"
 HelpFile=""
 ExeName32="MarshalUserInterface.exe"
