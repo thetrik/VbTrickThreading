@@ -95,7 +95,8 @@ In addition, there are also several examples in the attacment of working with mo
 - **PublicMarshaling** - Creating public objects (**Dictionary**) in the different threads and calling their methods (synchronously / asynchronously);
 - **PrivateMarshaling** - Creating private objects in different threads and calling their methods (synchronously / asynchronously);
 - **MarshalUserInterface** - Creating private objects in different threads and calling their methods (synchronously / asynchronously) based on user interfaces (contains tlb and Reg-Free manifest).
-
+- **InitProjectContextDll** - Initialization of the runtime in an ActiveX DLL and call the exported function from the different threads. Setup callbacks to the executable.
+- **InternetStatusCallback** - IternetStatusCallback usage in VB6. Async file downloading.
 
 The module is poorly tested so bugs are possible. I would be very glad to any bug-reports, wherever possible I will correct them.
 Thank you all for attention!
