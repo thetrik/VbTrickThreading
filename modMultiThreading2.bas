@@ -1215,20 +1215,28 @@ End Function
        
 ' // Free marshal data
 Public Sub FreeMarshalData( _
-           ByRef pStream As Long)
-    Dim hr  As Long
-
-    EnterCriticalSection tLockMarshal.tWinApiSection
-
+           ByVal pStream As Long)
+    Dim hr          As Long
+    Dim bIsInIDE    As Boolean
+    
+    Debug.Assert MakeTrue(bIsInIDE)
+    
+    If Not bIsInIDE Then
+        ' // Ensure atomic access to stream
+        EnterCriticalSection tLockMarshal.tWinApiSection
+    End If
+    
     hr = IStream_Reset(pStream)
     
     If hr >= 0 Then
         hr = CoReleaseMarshalData(pStream)
     End If
-
-    LeaveCriticalSection tLockMarshal.tWinApiSection
-
+    
     vbaObjSet pStream, ByVal 0&
+    
+    If Not bIsInIDE Then
+        LeaveCriticalSection tLockMarshal.tWinApiSection
+    End If
     
     If hr Then
         Err.Raise hr
@@ -1243,6 +1251,9 @@ Public Function UnMarshal( _
                 Optional ByVal bReleaseStream As Boolean = True) As IUnknown
     Dim tIID_IDispatch  As tCurGUID
     Dim hr              As Long
+    Dim bIsInIDE        As Boolean
+    
+    Debug.Assert MakeTrue(bIsInIDE)
     
     If pInterface = 0 Then
     
@@ -1256,16 +1267,11 @@ Public Function UnMarshal( _
     If bReleaseStream Then
         hr = CoGetInterfaceAndReleaseStream(pStream, ByVal pInterface, UnMarshal)
     Else
-        
-        If Not tLockMarshal.bIsInitialized Then
-            
-            InitializeCriticalSection tLockMarshal.tWinApiSection
-            tLockMarshal.bIsInitialized = True
-            
+       
+        If Not bIsInIDE Then
+            ' // To ensure zero offset in stream lock access
+            EnterCriticalSection tLockMarshal.tWinApiSection
         End If
-        
-        ' // To ensure zero offset in stream lock access
-        EnterCriticalSection tLockMarshal.tWinApiSection
         
         hr = IStream_Reset(pStream)
         
@@ -1273,7 +1279,9 @@ Public Function UnMarshal( _
             hr = CoUnmarshalInterface(pStream, ByVal pInterface, UnMarshal)
         End If
         
-        LeaveCriticalSection tLockMarshal.tWinApiSection
+        If Not bIsInIDE Then
+            LeaveCriticalSection tLockMarshal.tWinApiSection
+        End If
         
     End If
     
