@@ -857,8 +857,12 @@ Public Function InitCurrentThreadAndCallFunction( _
         
         If pThreadData <> 0 Then
             
+            CoInitialize ByVal 0&
+            
             ' // Just call by pointer
             hr = DispCallFunc(ByVal 0&, pfnCallback, CC_STDCALL, vbLong, 1, vbLong, VarPtr(CVar(pParam)), vRet)
+            
+            CoUninitialize
             
             If hr Then
                 Err.Raise hr
