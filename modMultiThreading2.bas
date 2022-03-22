@@ -10,7 +10,7 @@ Attribute VB_Name = "modMultiThreading"
 Option Explicit
 
 Private Const HEAP_CREATE_ENABLE_EXECUTE  As Long = &H40000
-Private Const PAGE_READWRITE              As Long = 4&
+Private Const PAGE_EXECUTE_READWRITE      As Long = &H40&
 Private Const CC_STDCALL                  As Long = 4
 Private Const HEAP_ZERO_MEMORY            As Long = &H8
 Private Const HKEY_CURRENT_USER           As Long = &H80000001
@@ -1877,7 +1877,7 @@ Private Sub ModifyVBHeader( _
     
     ptr = pVBHeader + &H2C
     ' // Allow to write to that page
-    VirtualProtect ByVal ptr, 4, PAGE_READWRITE, lOldProtect
+    VirtualProtect ByVal ptr, 4, PAGE_EXECUTE_READWRITE, lOldProtect
     
     ' // Set new Sub Main
     GetMem4 pNewAddress, ByVal ptr
@@ -1903,7 +1903,7 @@ Private Sub ModifyVBHeader( _
             ' // Unset bit 5
             lFlags = lFlags And &HFFFFFFEF
             ' // Are allowed to write in the page
-            VirtualProtect ByVal ptr, 4, PAGE_READWRITE, lOldProtect
+            VirtualProtect ByVal ptr, 4, PAGE_EXECUTE_READWRITE, lOldProtect
             ' // Write changet lFlags
             GetMem4 lFlags, ByVal ptr + &H28
             ' // Restoring the memory attributes
